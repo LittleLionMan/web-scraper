@@ -5,8 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY olg_watcher.py .
+COPY listener.py .
 
 RUN mkdir -p /data
 
-CMD ["python", "-u", "olg_watcher.py"]
+CMD ["python", "-u", "listener.py"]
