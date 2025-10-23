@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  olg-watcher:
+    build: .
+    container_name: olg-watcher
+    restart: unless-stopped
+    environment:
+      - BREVO_API_KEY=${BREVO_API_KEY}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - FROM_NAME=${FROM_NAME}
+      - MAIL_TO=${MAIL_TO}
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-900}
+      - HASH_FILE=/data/hashes.txt
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env
