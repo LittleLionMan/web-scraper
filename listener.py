@@ -12,20 +12,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 URL = "https://www.olg-hamm.nrw.de/aufgaben/geschaeftsverteilung/verwaltung/dez05/10_sammlung/aktuelle_informationen/index.php"
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "900"))
-HASH_FILE = os.getenv("HASH_FILE", "./hashes.txt")  # Lokal: aktuelles Verzeichnis
+HASH_FILE = os.getenv("HASH_FILE", "./hashes.txt")
 
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 FROM_EMAIL = os.getenv("FROM_EMAIL")
 FROM_NAME = os.getenv("FROM_NAME", "OLG Watcher")
 MAIL_TO = os.getenv("MAIL_TO")
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+def send_telegram(message):
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        logger.debug("Telegram-Benachrichtigung übersprungen: Variablen fehlen")
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        logger.info("Telegram-Nachricht gesendet")
+        return True
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Fehler beim Telegram-Versand: {e}")
+        return False
+
 
 def send_mail(subject, body):
     if not (BREVO_API_KEY and FROM_EMAIL and MAIL_TO):
-        logger.warning("Mailversand übersprungen: Brevo-Variablen fehlen.")
-        return
+        logger.debug("Mailversand übersprungen: Brevo-Variablen fehlen")
+        return False
 
     recipients = [{"email": email.strip()} for email in MAIL_TO.split(",")]
 
@@ -51,8 +79,18 @@ def send_mail(subject, body):
         )
         response.raise_for_status()
         logger.info(f"Mail via Brevo gesendet: {subject}")
+        return True
     except requests.exceptions.RequestException as e:
         logger.error(f"Fehler beim Brevo-Mailversand: {e}")
+        return False
+
+
+def notify(subject, body):
+    telegram_sent = send_telegram(f"<b>{subject}</b>\n\n{body}")
+    mail_sent = send_mail(subject, body)
+
+    if not telegram_sent and not mail_sent:
+        logger.warning("Keine Benachrichtigung konnte versendet werden!")
 
 
 def fetch_page():
@@ -114,6 +152,17 @@ def main():
     logger.info(f"Check-Intervall: {CHECK_INTERVAL} Sekunden")
     logger.info(f"Hash-Datei: {HASH_FILE}")
 
+    channels = []
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        channels.append("Telegram")
+    if BREVO_API_KEY and FROM_EMAIL and MAIL_TO:
+        channels.append("E-Mail")
+
+    if channels:
+        logger.info(f"Benachrichtigungskanäle: {', '.join(channels)}")
+    else:
+        logger.warning("⚠️ Keine Benachrichtigungskanäle konfiguriert!")
+
     last_full_hash, last_section_hash = load_hashes()
 
     while True:
@@ -125,11 +174,13 @@ def main():
             section_hash = get_hash(section)
 
             if last_full_hash is None:
-                logger.info("Erster Durchlauf - Baseline gesetzt, keine Mail versendet")
+                logger.info(
+                    "Erster Durchlauf - Baseline gesetzt, keine Benachrichtigung versendet"
+                )
             else:
                 if full_hash != last_full_hash:
                     logger.warning("⚠️ Strukturänderung auf der Seite erkannt!")
-                    send_mail(
+                    notify(
                         "OLG Hamm – Strukturänderung erkannt",
                         "Die Gesamtstruktur der Seite hat sich verändert (möglicherweise Layout oder Position des Ausbildungsbereichs).",
                     )
@@ -140,7 +191,7 @@ def main():
                         "Der Inhalt im Ausbildungsabschnitt hat sich geändert.\n\n"
                         f"Aktueller Inhalt:\n\n{section or '[leer]'}"
                     )
-                    send_mail("OLG Hamm – Ausbildungsplatz-Update!", msg)
+                    notify("OLG Hamm – Ausbildungsplatz-Update!", msg)
                 else:
                     logger.info("Keine Änderungen festgestellt")
 
