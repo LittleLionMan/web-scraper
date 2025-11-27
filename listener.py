@@ -1,7 +1,8 @@
-import os
-import time
 import hashlib
 import logging
+import os
+import time
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -19,7 +20,7 @@ try:
 except ImportError:
     pass
 
-URL = "https://www.olg-hamm.nrw.de/aufgaben/geschaeftsverteilung/verwaltung/dez05/10_sammlung/aktuelle_informationen/index.php"
+URL = "https://www.olg-hamm.nrw.de/aufgaben/geschaeftsverteilung/verwaltung/dez05-neu/01_Einstellungsverfahren/index.php"
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "900"))
 HASH_FILE = os.getenv("HASH_FILE", "./hashes.txt")
 
